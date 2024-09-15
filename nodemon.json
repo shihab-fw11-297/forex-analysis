@@ -1,0 +1,4 @@
+{
+    "ignore": ["data_EUR_USD.json","data_AUD_USD.json","data_GBP_USD.json"]
+  }
+  
