@@ -618,9 +618,502 @@ function predictNextCandleSeconds(candles) {
   }
 }
 
-let data=[
- {"t":1726256220,"o":1.312435,"h":1.31252,"l":1.31233,"c":1.312445},{"t":1726256160,"o":1.312635,"h":1.31271,"l":1.31235,"c":1.312425},{"t":1726256100,"o":1.312625,"h":1.31273,"l":1.31255,"c":1.312645},{"t":1726256040,"o":1.312625,"h":1.31272,"l":1.31248,"c":1.312625},{"t":1726255980,"o":1.312545,"h":1.31271,"l":1.31247,"c":1.312605},{"t":1726255920,"o":1.312525,"h":1.31262,"l":1.31232,"c":1.312535},{"t":1726255860,"o":1.312525,"h":1.31262,"l":1.31244,"c":1.312535},{"t":1726255800,"o":1.312595,"h":1.31268,"l":1.31236,"c":1.312515},{"t":1726255740,"o":1.312615,"h":1.31271,"l":1.31254,"c":1.312615},{"t":1726255680,"o":1.312635,"h":1.31271,"l":1.31247,"c":1.312595},{"t":1726255620,"o":1.312635,"h":1.31273,"l":1.31251,"c":1.312625},{"t":1726255560,"o":1.312625,"h":1.31273,"l":1.31246,"c":1.312635},{"t":1726255500,"o":1.312515,"h":1.31271,"l":1.31244,"c":1.312635},{"t":1726255440,"o":1.312545,"h":1.31264,"l":1.31245,"c":1.312525},{"t":1726255380,"o":1.312455,"h":1.31262,"l":1.31237,"c":1.312545},{"t":1726255320,"o":1.312425,"h":1.31257,"l":1.31234,"c":1.312445},{"t":1726255260,"o":1.312405,"h":1.3125,"l":1.31233,"c":1.312415},{"t":1726255200,"o":1.312305,"h":1.31251,"l":1.31223,"c":1.312425},{"t":1726255140,"o":1.312325,"h":1.31241,"l":1.31222,"c":1.312315},{"t":1726255080,"o":1.312375,"h":1.31246,"l":1.31216,"c":1.312315},{"t":1726255020,"o":1.312325,"h":1.31243,"l":1.31225,"c":1.312335},{"t":1726254960,"o":1.312335,"h":1.31243,"l":1.31225,"c":1.312335},{"t":1726254900,"o":1.312145,"h":1.3124,"l":1.31207,"c":1.312315},{"t":1726254840,"o":1.311975,"h":1.31221,"l":1.31188,"c":1.312135},{"t":1726254780,"o":1.312015,"h":1.3121,"l":1.31185,"c":1.311995},{"t":1726254720,"o":1.311945,"h":1.3121,"l":1.31187,"c":1.312025},{"t":1726254660,"o":1.311915,"h":1.31203,"l":1.31184,"c":1.311925},{"t":1726254600,"o":1.311905,"h":1.312,"l":1.31179,"c":1.311865},{"t":1726254540,"o":1.311995,"h":1.31208,"l":1.31182,"c":1.311915},{"t":1726254480,"o":1.311925,"h":1.31203,"l":1.31182,"c":1.311955},{"t":1726254420,"o":1.311925,"h":1.31217,"l":1.31182,"c":1.311935},{"t":1726254360,"o":1.312015,"h":1.3121,"l":1.31188,"c":1.311965},{"t":1726254300,"o":1.311845,"h":1.31209,"l":1.31174,"c":1.311985},{"t":1726254240,"o":1.311845,"h":1.31194,"l":1.31175,"c":1.311865},{"t":1726254180,"o":1.311865,"h":1.31194,"l":1.31173,"c":1.311835},{"t":1726254120,"o":1.312015,"h":1.3121,"l":1.31172,"c":1.311855},{"t":1726254060,"o":1.311975,"h":1.31219,"l":1.3119,"c":1.312025},{"t":1726254000,"o":1.311985,"h":1.31211,"l":1.31188,"c":1.311985},{"t":1726253940,"o":1.311905,"h":1.31215,"l":1.31182,"c":1.312035}
-]
+function predictTrend(data) {
+  // Bollinger Bands setup (standard values)
+  const bollingerPeriod = 20;
+  const bollingerMultiplier = 2;
+
+  // Function to calculate Bollinger Bands
+  function calculateBollingerBands(data) {
+      const length = data.length;
+      if (length < bollingerPeriod) return null;
+
+      let sum = 0;
+      for (let i = length - bollingerPeriod; i < length; i++) {
+          sum += data[i].c;
+      }
+      const sma = sum / bollingerPeriod;
+
+      let squaredSum = 0;
+      for (let i = length - bollingerPeriod; i < length; i++) {
+          squaredSum += Math.pow(data[i].c - sma, 2);
+      }
+      const variance = squaredSum / bollingerPeriod;
+      const stdDev = Math.sqrt(variance);
+
+      return {
+          upperBand: sma + bollingerMultiplier * stdDev,
+          lowerBand: sma - bollingerMultiplier * stdDev,
+          middleBand: sma
+      };
+  }
+
+  // Function to calculate Parabolic SAR (simplified version)
+  function calculateParabolicSAR(data) {
+      let sar = data[data.length - 1].c;
+      let accelerationFactor = 0.02;
+      let trend = 'flat';
+
+      for (let i = data.length - 2; i >= 0; i--) {
+          sar += accelerationFactor * (data[i].c - sar);
+          accelerationFactor = Math.min(accelerationFactor + 0.02, 0.2);
+
+          if (data[i].c > sar) trend = 'up';
+          else if (data[i].c < sar) trend = 'down';
+      }
+      return trend;
+  }
+
+  // Function to calculate ZigZag (with dynamic threshold)
+  function calculateZigZag(data) {
+      const length = data.length;
+      const threshold = 0.001 * data[length - 1].c;
+
+      let trend = 'flat';
+      if (length >= 2) {
+          const lastClose = data[length - 1].c;
+          const secondLastClose = data[length - 2].c;
+
+          if (Math.abs(lastClose - secondLastClose) > threshold) {
+              trend = lastClose > secondLastClose ? 'up' : 'down';
+          }
+      }
+      return trend;
+  }
+
+  // Function to calculate RSI
+  function calculateRSI(data, period = 14) {
+      if (data.length < period) return null;
+
+      let gains = 0, losses = 0;
+
+      for (let i = data.length - period; i < data.length; i++) {
+          let change = data[i].c - data[i - 1].c;
+          if (change > 0) {
+              gains += change;
+          } else {
+              losses -= change; // losses are positive
+          }
+      }
+      const avgGain = gains / period;
+      const avgLoss = losses / period;
+
+      if (avgLoss === 0) return 100; // Prevent division by zero
+      const rs = avgGain / avgLoss;
+      const rsi = 100 - (100 / (1 + rs));
+
+      return rsi;
+  }
+
+  // Step 1: Calculate Bollinger Bands
+  const bollingerBands = calculateBollingerBands(data);
+  if (!bollingerBands) {
+      return "Insufficient data for Bollinger Bands";
+  }
+
+  // Step 2: Get latest price close and check against Bollinger Bands
+  const latestClose = data[data.length - 1].c;
+  let bollingerSignal = 'flat';
+
+  if (latestClose > bollingerBands.upperBand) {
+      bollingerSignal = 'down'; // Overbought
+  } else if (latestClose < bollingerBands.lowerBand) {
+      bollingerSignal = 'up'; // Oversold
+  } else if (latestClose > bollingerBands.middleBand) {
+      bollingerSignal = 'up';
+  } else if (latestClose < bollingerBands.middleBand) {
+      bollingerSignal = 'down';
+  }
+
+  // Step 3: Calculate Parabolic SAR signal
+  const parabolicSARSignal = calculateParabolicSAR(data);
+
+  // Step 4: Calculate ZigZag signal
+  const zigZagSignal = calculateZigZag(data);
+
+  // Step 5: Calculate RSI
+  const rsi = calculateRSI(data);
+  let rsiSignal = 'flat';
+  if (rsi !== null) {
+      if (rsi > 70) {
+          rsiSignal = 'down'; // Overbought
+      } else if (rsi < 30) {
+          rsiSignal = 'up'; // Oversold
+      }
+  }
+
+  // Step 6: Combine signals
+  let upVotes = 0, downVotes = 0;
+
+  if (bollingerSignal === 'up') upVotes++;
+  else if (bollingerSignal === 'down') downVotes++;
+
+  if (parabolicSARSignal === 'up') upVotes++;
+  else if (parabolicSARSignal === 'down') downVotes++;
+
+  if (zigZagSignal === 'up') upVotes++;
+  else if (zigZagSignal === 'down') downVotes++;
+
+  if (rsiSignal === 'up') upVotes++;
+  else if (rsiSignal === 'down') downVotes++;
+
+  // Majority confirmation logic
+  if (upVotes > downVotes) return "up";
+  if (downVotes > upVotes) return "down";
+  return "flat";
+}
+
+
+function analyzeTrend(data) {
+  if (data.length < 2) {
+      throw new Error("Not enough data to analyze");
+  }
+
+  // Helper function to calculate the percentage change
+  function percentageChange(start, end) {
+      return ((end - start) / start) * 100;
+  }
+
+  // Calculate the percentage change from the beginning to the end of the data
+  const firstPrice = data[data.length - 1].c; // Closing price of the earliest entry
+  const lastPrice = data[0].c; // Closing price of the latest entry
+
+  const change = percentageChange(firstPrice, lastPrice);
+  const isUptrend = change > 0;
+
+  // Provide analysis based on trend direction
+  return isUptrend ? 'up' : 'down'
+}
+
+function calculateEMAThree(prices, period) {
+  const k = 2 / (period + 1);
+  return prices.reduce((acc, price, index) => {
+      if (index === 0) return [price];
+      acc.push((price - acc[index - 1]) * k + acc[index - 1]);
+      return acc;
+  }, []);
+}
+
+function macdStrategyThree(data) {
+  const closePrices = data.map(candle => candle.c);
+  const ema12 = calculateEMAThree(closePrices, 12);
+  const ema26 = calculateEMAThree(closePrices, 26);
+  const macdLine = ema12.map((v, i) => v - ema26[i]);
+  const signalLine = calculateEMAThree(macdLine, 9);
+  
+  const latestMacd = macdLine[macdLine.length - 1];
+  const latestSignal = signalLine[signalLine.length - 1];
+  
+  if (latestMacd > latestSignal) {
+      return 'up';
+  } else if (latestMacd < latestSignal) {
+      return 'down';
+  } else {
+      return 'flat';
+  }
+}
+
+function rsiStrategyThree(data) {
+  const closePrices = data.map(candle => candle.c);
+  const period = 14;
+  let gains = 0, losses = 0;
+  
+  for (let i = 1; i <= period; i++) {
+      const change = closePrices[i] - closePrices[i - 1];
+      if (change > 0) {
+          gains += change;
+      } else {
+          losses -= change;
+      }
+  }
+  
+  const averageGain = gains / period;
+  const averageLoss = losses / period;
+  
+  const rs = averageGain / averageLoss;
+  const rsi = 100 - (100 / (1 + rs));
+  
+  if (rsi > 70) {
+      return 'down';  // Overbought
+  } else if (rsi < 30) {
+      return 'up';    // Oversold
+  } else {
+      return 'flat';
+  }
+}
+
+function bollingerBandsStrategyThree(data) {
+  const closePrices = data.map(candle => candle.c);
+  const period = 20;
+  const sma = closePrices.slice(-period).reduce((a, b) => a + b) / period;
+  const squaredDiffs = closePrices.slice(-period).map(price => Math.pow(price - sma, 2));
+  const stdDev = Math.sqrt(squaredDiffs.reduce((a, b) => a + b) / period);
+  
+  const upperBand = sma + (stdDev * 2);
+  const lowerBand = sma - (stdDev * 2);
+  const lastClose = closePrices[closePrices.length - 1];
+  
+  if (lastClose > upperBand) {
+      return 'down';  // Price is outside the upper band
+  } else if (lastClose < lowerBand) {
+      return 'up';    // Price is outside the lower band
+  } else {
+      return 'flat';
+  }
+}
+
+
+// Function to calculate Parabolic SAR
+function calculateParabolicSARTechnical(data, accelerationFactor = 0.02, maxAccelerationFactor = 0.2) {
+  let sar = data[0].h; // Initial SAR value
+  let af = accelerationFactor;
+  let ep = data[0].l; // Extreme point (lowest low in an uptrend)
+  let isUptrend = true; // Start with an uptrend
+
+  const sarValues = [];
+
+  for (let i = 1; i < data.length; i++) {
+      const prev = data[i - 1];
+      const curr = data[i];
+
+      // Update SAR
+      sar = sar + af * (ep - sar);
+
+      // Update extreme point and acceleration factor
+      if (isUptrend) {
+          if (curr.l < ep) {
+              ep = curr.l;
+              af = Math.min(af + accelerationFactor, maxAccelerationFactor);
+          }
+      } else {
+          if (curr.h > ep) {
+              ep = curr.h;
+              af = Math.min(af + accelerationFactor, maxAccelerationFactor);
+          }
+      }
+
+      // Check for trend reversal
+      if (isUptrend && curr.c < sar) {
+          isUptrend = false;
+          sar = ep;
+          ep = curr.h;
+          af = accelerationFactor;
+      } else if (!isUptrend && curr.c > sar) {
+          isUptrend = true;
+          sar = ep;
+          ep = curr.l;
+          af = accelerationFactor;
+      }
+
+      sarValues.push(sar);
+  }
+
+  return sarValues;
+}
+
+// Function to calculate Rate of Change (ROC)
+function calculateROCTechnical(data, period = 14) {
+  let rocValues = [];
+
+  for (let i = period; i < data.length; i++) {
+      let previousPrice = data[i - period].c;
+      let currentPrice = data[i].c;
+      let roc = ((currentPrice - previousPrice) / previousPrice) * 100;
+      rocValues.push(roc);
+  }
+
+  return rocValues;
+}
+
+// Function to generate trading signal based on Parabolic SAR and ROC
+function generateSignal(data) {
+  const sarValues = calculateParabolicSARTechnical(data);
+  const rocValues = calculateROCTechnical(data);
+
+  const lastSAR = sarValues[sarValues.length - 1];
+  const lastPrice = data[data.length - 1].c;
+  const lastROC = rocValues[rocValues.length - 1];
+
+  let signal = 'flat'; // Default signal
+
+  if (lastSAR > lastPrice && lastROC < 0) {
+      signal = 'PUT'; // Downward trade
+  } else if (lastSAR < lastPrice && lastROC > 0) {
+      signal = 'CALL'; // Upward trade
+  }
+
+  return signal;
+}
+
+function calculateTypicalPrice(high, low, close) {
+  return (high + low + close) / 3;
+}
+
+// Calculate the CCI
+function calculateCCITechnical(data, period = 14) {
+  if (data.length < period) return [];
+
+  const cci = [];
+  const typicalPrices = data.map(d => calculateTypicalPrice(d.h, d.l, d.c));
+
+  // Calculate SMA of typical prices
+  for (let i = period - 1; i < typicalPrices.length; i++) {
+      const slice = typicalPrices.slice(i - period + 1, i + 1);
+      const sma = slice.reduce((a, b) => a + b) / period;
+
+      // Mean deviation
+      const meanDeviation = slice.reduce((a, b) => a + Math.abs(b - sma), 0) / period;
+
+      // CCI Calculation
+      const cciValue = (typicalPrices[i] - sma) / (0.015 * meanDeviation);
+      cci.push(cciValue);
+  }
+
+  return cci;
+}
+
+// Function to predict the signal
+function predictSignalTechnical(data) {
+  const period = 14;
+  const cci = calculateCCITechnical(data, period);
+  
+  if (cci.length === 0) return 'Flat'; // Not enough data to calculate CCI
+
+  const lastCCI = cci[cci.length - 1];
+
+  // Calculate the Alligator lines (simplified for this example)
+  const alligatorLines = {
+      greenLine: data[data.length - 1].c, // Replace with actual calculation
+      redLine: data[data.length - 2].c,   // Replace with actual calculation
+      blueLine: data[data.length - 3].c   // Replace with actual calculation
+  };
+
+  // Debugging prints
+  console.log("Alligator Lines:", alligatorLines);
+  console.log("Last CCI:", lastCCI);
+
+  // Determine crossing logic (simplified for example)
+  const greenCrossRed = alligatorLines.greenLine < alligatorLines.redLine;
+  const greenCrossBlue = alligatorLines.greenLine < alligatorLines.blueLine;
+  const cciBelowZero = lastCCI < 0;
+
+  if (greenCrossRed && greenCrossBlue && cciBelowZero) {
+      return 'Down'; // PUT Signal
+  } else if (!greenCrossRed && !greenCrossBlue && !cciBelowZero) {
+      return 'Up'; // CALL Signal
+  } else {
+      return 'Flat'; // No clear signal
+  }
+}
+
+// Utility functions for EMA and MACD
+function calculateEMASS(prices, period) {
+  const k = 2 / (period + 1);
+  let ema = [];
+  // Start with the simple moving average (SMA) for the initial value
+  let sum = prices.slice(0, period).reduce((acc, val) => acc + val, 0);
+  ema.push(sum / period);
+  
+  for (let i = period; i < prices.length; i++) {
+      ema.push(prices[i] * k + ema[ema.length - 1] * (1 - k));
+  }
+  return ema;
+}
+
+function calculateMACDSS(prices) {
+  if (prices.length < 26) {
+      throw new Error("Not enough data for MACD calculation");
+  }
+  const ema12 = calculateEMASS(prices, 12);
+  const ema26 = calculateEMASS(prices, 26);
+  const macdLine = ema12.slice(ema12.length - ema26.length).map((value, index) => value - ema26[index]);
+  const signalLine = calculateEMASS(macdLine, 9);
+  const histogram = macdLine.slice(macdLine.length - signalLine.length).map((value, index) => value - signalLine[index]);
+  return { macdLine, signalLine, histogram };
+}
+
+function calculateParabolicSARSS(data) {
+  const AF = 0.02; // Acceleration Factor
+  const maxAF = 0.2; // Maximum Acceleration Factor
+
+  if (data.length < 2) {
+      throw new Error("Not enough data for SAR calculation");
+  }
+
+  let sar = [data[0].l]; // Initial SAR value
+  let trend = 'up'; // Initial trend direction
+  let EP = data[0].h; // Extreme Point (high or low)
+  let AF_current = AF;
+
+  for (let i = 1; i < data.length; i++) {
+      let previousSAR = sar[i - 1];
+      if (trend === 'up') {
+          sar.push(previousSAR + AF_current * (EP - previousSAR));
+          if (data[i].l < sar[i]) {
+              trend = 'down';
+              EP = data[i].l;
+              AF_current = AF;
+          } else {
+              EP = Math.max(EP, data[i].h);
+              AF_current = Math.min(AF_current + AF, maxAF);
+          }
+      } else {
+          sar.push(previousSAR + AF_current * (EP - previousSAR));
+          if (data[i].h > sar[i]) {
+              trend = 'up';
+              EP = data[i].h;
+              AF_current = AF;
+          } else {
+              EP = Math.min(EP, data[i].l);
+              AF_current = Math.min(AF_current + AF, maxAF);
+          }
+      }
+  }
+  return sar;
+}
+
+// Main function to predict the next signal
+function predictSignalSS(data) {
+  const prices = data.map(d => d.c);
+
+  // Calculate MACD
+  const { macdLine, signalLine, histogram } = calculateMACDSS(prices);
+  const latestHistogram = histogram[histogram.length - 1];
+  const previousHistogram = histogram[histogram.length - 2];
+  
+  // Debugging outputs
+  console.log("MACD Line:", macdLine);
+  console.log("Signal Line:", signalLine);
+  console.log("Histogram:", histogram);
+
+  // Calculate EMA (9-period)
+  const ema9 = calculateEMASS(prices, 9);
+  const latestEMA = ema9[ema9.length - 1];
+  
+  // Calculate Parabolic SAR
+  const sar = calculateParabolicSARSS(data);
+  const latestSAR = sar[sar.length - 1];
+  const latestPrice = data[data.length - 1].c;
+
+  // Debugging outputs
+  console.log("Latest EMA (9):", latestEMA);
+  console.log("Latest SAR:", latestSAR);
+  console.log("Latest Price:", latestPrice);
+
+  // Determine signal
+  let signal = 'flat'; // Default signal
+
+  if (latestHistogram > 0 && previousHistogram <= 0 && latestSAR < latestPrice && latestEMA < latestPrice) {
+      signal = 'up'; // Buy signal
+  } else if (latestHistogram < 0 && previousHistogram >= 0 && latestSAR > latestPrice && latestEMA > latestPrice) {
+      signal = 'down'; // Sell signal
+  }
+
+  return signal;
+}
+
+
+let data=[{"t":1726465080,"o":1.10966,"h":1.10971,"l":1.10956,"c":1.10959},{"t":1726465020,"o":1.10966,"h":1.10972,"l":1.1096,"c":1.10965},{"t":1726464960,"o":1.10962,"h":1.10967,"l":1.10959,"c":1.10962},{"t":1726464900,"o":1.10969,"h":1.10972,"l":1.1096,"c":1.10963},{"t":1726464840,"o":1.10962,"h":1.10971,"l":1.10959,"c":1.10968},{"t":1726464780,"o":1.10963,"h":1.10966,"l":1.10959,"c":1.10963},{"t":1726464720,"o":1.10964,"h":1.10968,"l":1.10958,"c":1.10962},{"t":1726464660,"o":1.10968,"h":1.10971,"l":1.10962,"c":1.10966},{"t":1726464600,"o":1.10973,"h":1.10976,"l":1.10964,"c":1.10967},{"t":1726464540,"o":1.10973,"h":1.10976,"l":1.10967,"c":1.10972},{"t":1726464480,"o":1.10968,"h":1.10977,"l":1.10965,"c":1.10974},{"t":1726464420,"o":1.10967,"h":1.10977,"l":1.10964,"c":1.10969},{"t":1726464360,"o":1.10969,"h":1.10973,"l":1.10964,"c":1.10968},{"t":1726464300,"o":1.10974,"h":1.10977,"l":1.10964,"c":1.10968},{"t":1726464240,"o":1.10973,"h":1.10976,"l":1.1097,"c":1.10973},{"t":1726464180,"o":1.10972,"h":1.10977,"l":1.10965,"c":1.10974},{"t":1726464120,"o":1.10973,"h":1.10977,"l":1.1097,"c":1.10973},{"t":1726464060,"o":1.10972,"h":1.10977,"l":1.10964,"c":1.10972},{"t":1726464000,"o":1.10975,"h":1.10978,"l":1.10971,"c":1.10974},{"t":1726463940,"o":1.10971,"h":1.10975,"l":1.10965,"c":1.10972},{"t":1726463880,"o":1.10968,"h":1.10973,"l":1.10965,"c":1.1097},{"t":1726463820,"o":1.10969,"h":1.10972,"l":1.10964,"c":1.10967},{"t":1726463760,"o":1.10968,"h":1.10973,"l":1.10965,"c":1.10968},{"t":1726463700,"o":1.10966,"h":1.10973,"l":1.10963,"c":1.1097},{"t":1726463640,"o":1.1097,"h":1.10973,"l":1.1096,"c":1.10965},{"t":1726463580,"o":1.10969,"h":1.10974,"l":1.10965,"c":1.10968},{"t":1726463520,"o":1.10966,"h":1.10973,"l":1.10963,"c":1.1097},{"t":1726463460,"o":1.10968,"h":1.10972,"l":1.10962,"c":1.10968},{"t":1726463400,"o":1.10972,"h":1.10978,"l":1.10966,"c":1.1097},{"t":1726463340,"o":1.1098,"h":1.10983,"l":1.1097,"c":1.10974},{"t":1726463280,"o":1.10984,"h":1.10988,"l":1.10975,"c":1.10979},{"t":1726463220,"o":1.10991,"h":1.10995,"l":1.10981,"c":1.10985},{"t":1726463160,"o":1.10986,"h":1.10996,"l":1.10983,"c":1.10993},{"t":1726463100,"o":1.10985,"h":1.10989,"l":1.1098,"c":1.10985},{"t":1726463040,"o":1.1098,"h":1.10987,"l":1.10976,"c":1.10984},{"t":1726462980,"o":1.10985,"h":1.1099,"l":1.10981,"c":1.10984},{"t":1726462920,"o":1.10985,"h":1.10988,"l":1.10981,"c":1.10984},{"t":1726462860,"o":1.1098,"h":1.10993,"l":1.10977,"c":1.10984},{"t":1726462800,"o":1.10971,"h":1.10984,"l":1.10966,"c":1.10981},{"t":1726462740,"o":1.10975,"h":1.10978,"l":1.10969,"c":1.10972},{"t":1726462680,"o":1.1098,"h":1.10984,"l":1.10972,"c":1.10976},{"t":1726462620,"o":1.10985,"h":1.10991,"l":1.10978,"c":1.10981},{"t":1726462560,"o":1.10984,"h":1.10988,"l":1.10981,"c":1.10984},{"t":1726462500,"o":1.10984,"h":1.10988,"l":1.10981,"c":1.10985},{"t":1726462440,"o":1.10975,"h":1.10986,"l":1.10971,"c":1.10983},{"t":1726462380,"o":1.10978,"h":1.10983,"l":1.1097,"c":1.10973},{"t":1726462320,"o":1.10983,"h":1.10986,"l":1.10977,"c":1.1098},{"t":1726462260,"o":1.10984,"h":1.10988,"l":1.10981,"c":1.10984},{"t":1726462200,"o":1.10984,"h":1.10988,"l":1.10979,"c":1.10983},{"t":1726462140,"o":1.10974,"h":1.10988,"l":1.10971,"c":1.10985},{"t":1726462080,"o":1.10974,"h":1.10977,"l":1.10969,"c":1.10973},{"t":1726462020,"o":1.10972,"h":1.10976,"l":1.10968,"c":1.10973},{"t":1726461960,"o":1.10981,"h":1.10988,"l":1.10968,"c":1.10971},{"t":1726461900,"o":1.1098,"h":1.10987,"l":1.10977,"c":1.1098},{"t":1726461840,"o":1.10978,"h":1.10982,"l":1.10975,"c":1.10979},{"t":1726461780,"o":1.1098,"h":1.10986,"l":1.10974,"c":1.10977},{"t":1726461720,"o":1.10978,"h":1.1099,"l":1.10974,"c":1.10979},{"t":1726461660,"o":1.10981,"h":1.10986,"l":1.10976,"c":1.10979},{"t":1726461600,"o":1.10994,"h":1.10997,"l":1.10973,"c":1.1098},{"t":1726461540,"o":1.10999,"h":1.11004,"l":1.10992,"c":1.10995}]
 
 let result1 = predictNextDirection(data);
 let result2 = predictNextCandleDirection(data);
@@ -632,11 +1125,20 @@ let result7 = predictNextCandle8(data);
 let result8 = predictNextCandleNEW(data);
 let result9 = predictNextCandleSeconds(data);
 let result10 = predictNextCandle(data);
+const result11 = predictTrend(data);
+const result12 = analyzeTrend(data);
+const result13 = macdStrategyThree(data);
+const result14 = rsiStrategyThree(data);
+const result15 = bollingerBandsStrategyThree(data);
+const result16 = generateSignal(data);
+const result17 = predictSignalTechnical(data);
+const result18 =predictSignalSS(data);
 
-// Store all results in an array for easier counting
 const results = [
     result1, result2, result3, result4, result5,
-    result6, result7, result8, result9, result10
+    result6, result7, result8, result9, result10,
+    result11,result12,result13,result14,result15,
+    result16,result17,result18
 ];
 
 // Initialize counters for each direction

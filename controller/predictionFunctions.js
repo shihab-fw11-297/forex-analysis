@@ -618,6 +618,486 @@ function predictNextCandleSeconds(candles) {
   }
 }
 
+function predictTrend(data) {
+  // Bollinger Bands setup (standard values)
+  const bollingerPeriod = 20;
+  const bollingerMultiplier = 2;
+
+  // Function to calculate Bollinger Bands
+  function calculateBollingerBands(data) {
+      const length = data.length;
+      if (length < bollingerPeriod) return null;
+
+      let sum = 0;
+      for (let i = length - bollingerPeriod; i < length; i++) {
+          sum += data[i].c;
+      }
+      const sma = sum / bollingerPeriod;
+
+      let squaredSum = 0;
+      for (let i = length - bollingerPeriod; i < length; i++) {
+          squaredSum += Math.pow(data[i].c - sma, 2);
+      }
+      const variance = squaredSum / bollingerPeriod;
+      const stdDev = Math.sqrt(variance);
+
+      return {
+          upperBand: sma + bollingerMultiplier * stdDev,
+          lowerBand: sma - bollingerMultiplier * stdDev,
+          middleBand: sma
+      };
+  }
+
+  // Function to calculate Parabolic SAR (simplified version)
+  function calculateParabolicSAR(data) {
+      let sar = data[data.length - 1].c;
+      let accelerationFactor = 0.02;
+      let trend = 'flat';
+
+      for (let i = data.length - 2; i >= 0; i--) {
+          sar += accelerationFactor * (data[i].c - sar);
+          accelerationFactor = Math.min(accelerationFactor + 0.02, 0.2);
+
+          if (data[i].c > sar) trend = 'up';
+          else if (data[i].c < sar) trend = 'down';
+      }
+      return trend;
+  }
+
+  // Function to calculate ZigZag (with dynamic threshold)
+  function calculateZigZag(data) {
+      const length = data.length;
+      const threshold = 0.001 * data[length - 1].c;
+
+      let trend = 'flat';
+      if (length >= 2) {
+          const lastClose = data[length - 1].c;
+          const secondLastClose = data[length - 2].c;
+
+          if (Math.abs(lastClose - secondLastClose) > threshold) {
+              trend = lastClose > secondLastClose ? 'up' : 'down';
+          }
+      }
+      return trend;
+  }
+
+  // Function to calculate RSI
+  function calculateRSI(data, period = 14) {
+      if (data.length < period) return null;
+
+      let gains = 0, losses = 0;
+
+      for (let i = data.length - period; i < data.length; i++) {
+          let change = data[i].c - data[i - 1].c;
+          if (change > 0) {
+              gains += change;
+          } else {
+              losses -= change; // losses are positive
+          }
+      }
+      const avgGain = gains / period;
+      const avgLoss = losses / period;
+
+      if (avgLoss === 0) return 100; // Prevent division by zero
+      const rs = avgGain / avgLoss;
+      const rsi = 100 - (100 / (1 + rs));
+
+      return rsi;
+  }
+
+  // Step 1: Calculate Bollinger Bands
+  const bollingerBands = calculateBollingerBands(data);
+  if (!bollingerBands) {
+      return "Insufficient data for Bollinger Bands";
+  }
+
+  // Step 2: Get latest price close and check against Bollinger Bands
+  const latestClose = data[data.length - 1].c;
+  let bollingerSignal = 'flat';
+
+  if (latestClose > bollingerBands.upperBand) {
+      bollingerSignal = 'down'; // Overbought
+  } else if (latestClose < bollingerBands.lowerBand) {
+      bollingerSignal = 'up'; // Oversold
+  } else if (latestClose > bollingerBands.middleBand) {
+      bollingerSignal = 'up';
+  } else if (latestClose < bollingerBands.middleBand) {
+      bollingerSignal = 'down';
+  }
+
+  // Step 3: Calculate Parabolic SAR signal
+  const parabolicSARSignal = calculateParabolicSAR(data);
+
+  // Step 4: Calculate ZigZag signal
+  const zigZagSignal = calculateZigZag(data);
+
+  // Step 5: Calculate RSI
+  const rsi = calculateRSI(data);
+  let rsiSignal = 'flat';
+  if (rsi !== null) {
+      if (rsi > 70) {
+          rsiSignal = 'down'; // Overbought
+      } else if (rsi < 30) {
+          rsiSignal = 'up'; // Oversold
+      }
+  }
+
+  // Step 6: Combine signals
+  let upVotes = 0, downVotes = 0;
+
+  if (bollingerSignal === 'up') upVotes++;
+  else if (bollingerSignal === 'down') downVotes++;
+
+  if (parabolicSARSignal === 'up') upVotes++;
+  else if (parabolicSARSignal === 'down') downVotes++;
+
+  if (zigZagSignal === 'up') upVotes++;
+  else if (zigZagSignal === 'down') downVotes++;
+
+  if (rsiSignal === 'up') upVotes++;
+  else if (rsiSignal === 'down') downVotes++;
+
+  // Majority confirmation logic
+  if (upVotes > downVotes) return "up";
+  if (downVotes > upVotes) return "down";
+  return "flat";
+}
+
+
+function analyzeTrend(data) {
+  if (data.length < 2) {
+      throw new Error("Not enough data to analyze");
+  }
+
+  // Helper function to calculate the percentage change
+  function percentageChange(start, end) {
+      return ((end - start) / start) * 100;
+  }
+
+  // Calculate the percentage change from the beginning to the end of the data
+  const firstPrice = data[data.length - 1].c; // Closing price of the earliest entry
+  const lastPrice = data[0].c; // Closing price of the latest entry
+
+  const change = percentageChange(firstPrice, lastPrice);
+  const isUptrend = change > 0;
+
+  // Provide analysis based on trend direction
+  return isUptrend ? 'up' : 'down'
+}
+
+function calculateEMAThree(prices, period) {
+  const k = 2 / (period + 1);
+  return prices.reduce((acc, price, index) => {
+      if (index === 0) return [price];
+      acc.push((price - acc[index - 1]) * k + acc[index - 1]);
+      return acc;
+  }, []);
+}
+
+function macdStrategyThree(data) {
+  const closePrices = data.map(candle => candle.c);
+  const ema12 = calculateEMAThree(closePrices, 12);
+  const ema26 = calculateEMAThree(closePrices, 26);
+  const macdLine = ema12.map((v, i) => v - ema26[i]);
+  const signalLine = calculateEMAThree(macdLine, 9);
+  
+  const latestMacd = macdLine[macdLine.length - 1];
+  const latestSignal = signalLine[signalLine.length - 1];
+  
+  if (latestMacd > latestSignal) {
+      return 'up';
+  } else if (latestMacd < latestSignal) {
+      return 'down';
+  } else {
+      return 'flat';
+  }
+}
+
+function rsiStrategyThree(data) {
+  const closePrices = data.map(candle => candle.c);
+  const period = 14;
+  let gains = 0, losses = 0;
+  
+  for (let i = 1; i <= period; i++) {
+      const change = closePrices[i] - closePrices[i - 1];
+      if (change > 0) {
+          gains += change;
+      } else {
+          losses -= change;
+      }
+  }
+  
+  const averageGain = gains / period;
+  const averageLoss = losses / period;
+  
+  const rs = averageGain / averageLoss;
+  const rsi = 100 - (100 / (1 + rs));
+  
+  if (rsi > 70) {
+      return 'down';  // Overbought
+  } else if (rsi < 30) {
+      return 'up';    // Oversold
+  } else {
+      return 'flat';
+  }
+}
+
+function bollingerBandsStrategyThree(data) {
+  const closePrices = data.map(candle => candle.c);
+  const period = 20;
+  const sma = closePrices.slice(-period).reduce((a, b) => a + b) / period;
+  const squaredDiffs = closePrices.slice(-period).map(price => Math.pow(price - sma, 2));
+  const stdDev = Math.sqrt(squaredDiffs.reduce((a, b) => a + b) / period);
+  
+  const upperBand = sma + (stdDev * 2);
+  const lowerBand = sma - (stdDev * 2);
+  const lastClose = closePrices[closePrices.length - 1];
+  
+  if (lastClose > upperBand) {
+      return 'down';  // Price is outside the upper band
+  } else if (lastClose < lowerBand) {
+      return 'up';    // Price is outside the lower band
+  } else {
+      return 'flat';
+  }
+}
+
+
+// Function to calculate Parabolic SAR
+function calculateParabolicSARTechnical(data, accelerationFactor = 0.02, maxAccelerationFactor = 0.2) {
+  let sar = data[0].h; // Initial SAR value
+  let af = accelerationFactor;
+  let ep = data[0].l; // Extreme point (lowest low in an uptrend)
+  let isUptrend = true; // Start with an uptrend
+
+  const sarValues = [];
+
+  for (let i = 1; i < data.length; i++) {
+      const prev = data[i - 1];
+      const curr = data[i];
+
+      // Update SAR
+      sar = sar + af * (ep - sar);
+
+      // Update extreme point and acceleration factor
+      if (isUptrend) {
+          if (curr.l < ep) {
+              ep = curr.l;
+              af = Math.min(af + accelerationFactor, maxAccelerationFactor);
+          }
+      } else {
+          if (curr.h > ep) {
+              ep = curr.h;
+              af = Math.min(af + accelerationFactor, maxAccelerationFactor);
+          }
+      }
+
+      // Check for trend reversal
+      if (isUptrend && curr.c < sar) {
+          isUptrend = false;
+          sar = ep;
+          ep = curr.h;
+          af = accelerationFactor;
+      } else if (!isUptrend && curr.c > sar) {
+          isUptrend = true;
+          sar = ep;
+          ep = curr.l;
+          af = accelerationFactor;
+      }
+
+      sarValues.push(sar);
+  }
+
+  return sarValues;
+}
+
+// Function to calculate Rate of Change (ROC)
+function calculateROCTechnical(data, period = 14) {
+  let rocValues = [];
+
+  for (let i = period; i < data.length; i++) {
+      let previousPrice = data[i - period].c;
+      let currentPrice = data[i].c;
+      let roc = ((currentPrice - previousPrice) / previousPrice) * 100;
+      rocValues.push(roc);
+  }
+
+  return rocValues;
+}
+
+// Function to generate trading signal based on Parabolic SAR and ROC
+function generateSignal(data) {
+  const sarValues = calculateParabolicSARTechnical(data);
+  const rocValues = calculateROCTechnical(data);
+
+  const lastSAR = sarValues[sarValues.length - 1];
+  const lastPrice = data[data.length - 1].c;
+  const lastROC = rocValues[rocValues.length - 1];
+
+  let signal = 'flat'; // Default signal
+
+  if (lastSAR > lastPrice && lastROC < 0) {
+      signal = 'PUT'; // Downward trade
+  } else if (lastSAR < lastPrice && lastROC > 0) {
+      signal = 'CALL'; // Upward trade
+  }
+
+  return signal;
+}
+
+function calculateTypicalPrice(high, low, close) {
+  return (high + low + close) / 3;
+}
+
+// Calculate the CCI
+function calculateCCITechnical(data, period = 14) {
+  if (data.length < period) return [];
+
+  const cci = [];
+  const typicalPrices = data.map(d => calculateTypicalPrice(d.h, d.l, d.c));
+
+  // Calculate SMA of typical prices
+  for (let i = period - 1; i < typicalPrices.length; i++) {
+      const slice = typicalPrices.slice(i - period + 1, i + 1);
+      const sma = slice.reduce((a, b) => a + b) / period;
+
+      // Mean deviation
+      const meanDeviation = slice.reduce((a, b) => a + Math.abs(b - sma), 0) / period;
+
+      // CCI Calculation
+      const cciValue = (typicalPrices[i] - sma) / (0.015 * meanDeviation);
+      cci.push(cciValue);
+  }
+
+  return cci;
+}
+
+// Function to predict the signal
+function predictSignalTechnical(data) {
+  const period = 14;
+  const cci = calculateCCITechnical(data, period);
+  
+  if (cci.length === 0) return 'Flat'; // Not enough data to calculate CCI
+
+  const lastCCI = cci[cci.length - 1];
+
+  // Calculate the Alligator lines (simplified for this example)
+  const alligatorLines = {
+      greenLine: data[data.length - 1].c, // Replace with actual calculation
+      redLine: data[data.length - 2].c,   // Replace with actual calculation
+      blueLine: data[data.length - 3].c   // Replace with actual calculation
+  };
+
+  // Debugging prints
+  console.log("Alligator Lines:", alligatorLines);
+  console.log("Last CCI:", lastCCI);
+
+  // Determine crossing logic (simplified for example)
+  const greenCrossRed = alligatorLines.greenLine < alligatorLines.redLine;
+  const greenCrossBlue = alligatorLines.greenLine < alligatorLines.blueLine;
+  const cciBelowZero = lastCCI < 0;
+
+  if (greenCrossRed && greenCrossBlue && cciBelowZero) {
+      return 'Down'; // PUT Signal
+  } else if (!greenCrossRed && !greenCrossBlue && !cciBelowZero) {
+      return 'Up'; // CALL Signal
+  } else {
+      return 'Flat'; // No clear signal
+  }
+}
+
+// Utility functions for EMA and MACD
+function calculateEMASS(prices, period) {
+  const k = 2 / (period + 1);
+  let ema = [];
+  // Start with the simple moving average (SMA) for the initial value
+  let sum = prices.slice(0, period).reduce((acc, val) => acc + val, 0);
+  ema.push(sum / period);
+  
+  for (let i = period; i < prices.length; i++) {
+      ema.push(prices[i] * k + ema[ema.length - 1] * (1 - k));
+  }
+  return ema;
+}
+
+function calculateMACDSS(prices) {
+  const ema12 = calculateEMASS(prices, 12);
+  const ema26 = calculateEMASS(prices, 26);
+  const macdLine = ema12.slice(ema12.length - ema26.length).map((value, index) => value - ema26[index]);
+  const signalLine = calculateEMASS(macdLine, 9);
+  const histogram = macdLine.slice(macdLine.length - signalLine.length).map((value, index) => value - signalLine[index]);
+  return { macdLine, signalLine, histogram };
+}
+
+function calculateParabolicSARSS(data) {
+  const AF = 0.02; // Acceleration Factor
+  const maxAF = 0.2; // Maximum Acceleration Factor
+
+  let sar = [data[0].l]; // Initial SAR value
+  let trend = 'up'; // Initial trend direction
+  let EP = data[0].h; // Extreme Point (high or low)
+  let AF_current = AF;
+
+  for (let i = 1; i < data.length; i++) {
+      let previousSAR = sar[i - 1];
+      if (trend === 'up') {
+          sar.push(previousSAR + AF_current * (EP - previousSAR));
+          if (data[i].l < sar[i]) {
+              trend = 'down';
+              EP = data[i].l;
+              AF_current = AF;
+          } else {
+              EP = Math.max(EP, data[i].h);
+              AF_current = Math.min(AF_current + AF, maxAF);
+          }
+      } else {
+          sar.push(previousSAR + AF_current * (EP - previousSAR));
+          if (data[i].h > sar[i]) {
+              trend = 'up';
+              EP = data[i].h;
+              AF_current = AF;
+          } else {
+              EP = Math.min(EP, data[i].l);
+              AF_current = Math.min(AF_current + AF, maxAF);
+          }
+      }
+  }
+  return sar;
+}
+
+// Main function to predict the next signal
+function predictSignalSS(data) {
+  const prices = data.map(d => d.c);
+
+  // Calculate MACD
+  const { macdLine, signalLine, histogram } = calculateMACDSS(prices);
+  const latestHistogram = histogram[histogram.length - 1];
+  const previousHistogram = histogram[histogram.length - 2];
+
+  // Calculate EMA (9-period)
+  const ema9 = calculateEMASS(prices, 9);
+
+  // Calculate Parabolic SAR
+  const sar = calculateParabolicSARSS(data);
+
+  // Get the latest values
+  const latestEMA = ema9[ema9.length - 1];
+  const latestSAR = sar[sar.length - 1];
+  const latestPrice = data[data.length - 1].c;
+
+  // Determine signal
+  let signal = 'flat'; // Default signal
+
+  if (latestHistogram > 0 && previousHistogram <= 0 && latestSAR < latestPrice && latestEMA < latestPrice) {
+      signal = 'up'; // Buy signal
+  } else if (latestHistogram < 0 && previousHistogram >= 0 && latestSAR > latestPrice && latestEMA > latestPrice) {
+      signal = 'down'; // Sell signal
+  }
+
+  return signal;
+}
+
+
 module.exports = {
     predictNextDirection,
     predictNextCandleDirection,
@@ -628,5 +1108,13 @@ module.exports = {
     predictNextCandle8,
     predictNextCandleNEW,
     predictNextCandleSeconds,
-    predictNextCandle
+    predictNextCandle,
+    predictTrend,
+    analyzeTrend,
+    macdStrategyThree,
+    rsiStrategyThree,
+    bollingerBandsStrategyThree,
+    generateSignal,
+    predictSignalTechnical,
+    predictSignalSS
 }
