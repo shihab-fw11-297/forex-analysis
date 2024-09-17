@@ -1,5 +1,5 @@
 const express = require("express");
-const { fetchLiveData, analyzeData, analyzeDataJob } = require("../controller/data");
+const { fetchNewLiveData, analyzeData, analyzeDataJob } = require("../controller/data");
 const Router = express.Router();
 
 
@@ -9,8 +9,8 @@ Router.get("/test", (req,res,next)=>{
   })
 
 
-  Router.get("/fetchdata", fetchLiveData)
-  Router.get("/analyzeData",analyzeDataJob)
+  Router.get("/fetchdata", fetchNewLiveData)
+  Router.get("/analyzeData",analyzeData)
 
 
   module.exports = Router

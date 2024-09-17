@@ -19,16 +19,20 @@ const {
   bollingerBandsStrategyThree,
   generateSignal,
   predictSignalTechnical,
-  predictSignalSS
+  predictSignalSS,
+  predictNextSignalEliza,
+  predictSignalSHIH,
+  predictNextMinutes
 } = require("./predictionFunctions.js");
 const cron = require("node-cron");
 const nodemailer = require("nodemailer");
+const { log } = require("console");
 
 const fetchLiveData = async (currencies) => {
   try {
     for (const currency of currencies) {
       // Define the API URL based on the currency
-      const apiUrl = `https://api.finazon.io/latest/finazon/forex/time_series?ticker=${currency}&interval=1m&page=0&page_size=40&apikey=18535cbd97e2400d93f96802097d83c9af`;
+      const apiUrl = `https://api.finazon.io/latest/finazon/forex/time_series?ticker=${currency}&interval=1m&page=0&page_size=100&apikey=18535cbd97e2400d93f96802097d83c9af`;
 
       // Fetch data from the API
       const response = await axios.get(apiUrl);
@@ -53,9 +57,43 @@ const fetchLiveData = async (currencies) => {
   }
 };
 
-const analyzeData = async (currencies) => {
+const fetchNewLiveData = async (req, res, next) => {
+  try {
+    // Get the currency parameter from the query string
+    let currency = req.query.currency;
+
+    if (!currency) {
+      return res.status(400).json({
+        message: "Currency query parameter is required.",
+      });
+    }
+
+    // Define the API URL based on the currency
+    const apiUrl = `https://api.finazon.io/latest/finazon/forex/time_series?ticker=${currency}&interval=1m&page=0&page_size=100&apikey=18535cbd97e2400d93f96802097d83c9af`;
+
+    // Fetch data from the API
+    const response = await axios.get(apiUrl);
+    const data = response.data.data;
+
+    // Send the fetched data as a response
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error("Error fetching live data:", err);
+    return res.status(500).json({
+      message: "Error fetching live data",
+      error: err.message,
+    });
+  }
+};
+
+
+const analyzeData = async (req, res, next) => {
   try {
     let allResults = {};
+
+    let currencies = ["EUR/USD", "GBP/USD", "AUD/USD"];
+    
+    const liveDataResult = await fetchLiveData(currencies);
 
     for (const currency of currencies) {
       // Define the path to the JSON file for each currency
@@ -73,6 +111,9 @@ const analyzeData = async (currencies) => {
       const data = JSON.parse(fileContent);
 
       // Apply prediction functions
+      console.log(data?.data[0])
+
+
       const results = [
         predictNextDirection(data?.data.sort((a, b) => a.t - b.t)),
         predictNextCandleDirection(data?.data.sort((a, b) => a.t - b.t)),
@@ -91,7 +132,10 @@ const analyzeData = async (currencies) => {
         bollingerBandsStrategyThree(data?.data.sort((a, b) => a.t - b.t)),
         generateSignal(data?.data.sort((a, b) => a.t - b.t)),
         predictSignalTechnical(data?.data.sort((a, b) => a.t - b.t)),
-        predictSignalSS(data?.data.sort((a, b) => a.t - b.t))
+        predictSignalSS(data?.data.sort((a, b) => a.t - b.t)),
+        predictNextSignalEliza(data?.data.sort((a, b) => a.t - b.t)),
+        predictSignalSHIH(data?.data.sort((a, b) => a.t - b.t)),
+        predictNextMinutes(data?.data.sort((a, b) => a.t - b.t))
       ];
 
       // Initialize counters for each direction
@@ -112,7 +156,7 @@ const analyzeData = async (currencies) => {
 
       // Store results in an object
       allResults[currency] = {
-        results,
+        // results,
         counts: {
           upCount,
           downCount,
@@ -121,10 +165,12 @@ const analyzeData = async (currencies) => {
       };
     }
 
-    // Send the response (you can adapt this to fit your needs)
-    console.log("Analysis complete:", allResults);
+    res.status(200).json({
+      status:200,
+      message:"fetch and analyze data successfully",
+      result:allResults
+    });
 
-    return allResults;
   } catch (err) {
     console.error(err);
     throw new Error("Something went wrong during analysis");
@@ -194,4 +240,4 @@ const runJob = async () => {
   });
 };
 
-module.exports = { fetchLiveData, analyzeData, runJob, analyzeDataJob };
+module.exports = { fetchLiveData, analyzeData, runJob, analyzeDataJob,fetchNewLiveData };

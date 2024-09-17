@@ -10,6 +10,6 @@ app.use(express.json());
 app.use("/api/v1", userRoute);
 
 app.listen(process.env.PORT || 5000, async () => {
-    await runJob()
+    // await runJob()
     console.log("Backend server is running!");
   });

@@ -1112,6 +1112,186 @@ function predictSignalSS(data) {
   return signal;
 }
 
+function calculateSMAEliza(data, period) {
+    const sma = [];
+    for (let i = 0; i <= data.length - period; i++) {
+        const slice = data.slice(i, i + period);
+        const avg = slice.reduce((acc, curr) => acc + curr.c, 0) / period;
+        sma.push(avg);
+    }
+    return sma;
+}
+
+function calculateRSIEliza(data, period) {
+    let gains = 0;
+    let losses = 0;
+    
+    for (let i = 1; i < period; i++) {
+        const change = data[i].c - data[i - 1].c;
+        if (change > 0) {
+            gains += change;
+        } else {
+            losses -= change;
+        }
+    }
+    
+    const avgGain = gains / period;
+    const avgLoss = losses / period;
+    
+    const rs = avgGain / avgLoss;
+    const rsi = 100 - (100 / (1 + rs));
+    
+    return rsi;
+}
+
+function predictNextSignalEliza(data) {
+    // Define periods for the alligator moving averages
+    const alligatorShortPeriod = 5;
+    const alligatorMediumPeriod = 8;
+    const alligatorLongPeriod = 13;
+    const rsiPeriod = 35;
+    
+    // Calculate SMA for each period
+    const shortSMA = calculateSMAEliza(data, alligatorShortPeriod);
+    const mediumSMA = calculateSMAEliza(data, alligatorMediumPeriod);
+    const longSMA = calculateSMAEliza(data, alligatorLongPeriod);
+    
+    // Calculate RSI
+    const rsi = calculateRSIEliza(data, rsiPeriod);
+    
+    const lastPrice = data[data.length - 1].c;
+
+    // Alligator Crosses Down (downtrend)
+    if (shortSMA[shortSMA.length - 1] < longSMA[longSMA.length - 1] &&
+        mediumSMA[mediumSMA.length - 1] < longSMA[longSMA.length - 1] &&
+        rsi < 50) {
+        return "Down";
+    }
+    
+    // Alligator Crosses Up (uptrend)
+    if (shortSMA[shortSMA.length - 1] > longSMA[longSMA.length - 1] &&
+        mediumSMA[mediumSMA.length - 1] > longSMA[longSMA.length - 1] &&
+        rsi > 50) {
+        return "Up";
+    }
+    
+    // No clear trend (sideways)
+    return "Flat";
+}
+
+
+
+function predictSignalSHIH(data) {
+    try {
+        const PERIOD = 5; // Set the period for Donchian Channel
+        let donchianUpper = -Infinity;
+        let donchianLower = Infinity;
+        let stcCurrent = 0; // A simple STC approximation
+        
+        // Loop through the data to calculate Donchian Channel
+        data.forEach((candle, index) => {
+            const high = candle.h;
+            const low = candle.l;
+            // Donchian upper is the highest high in the given period
+            donchianUpper = Math.max(donchianUpper, high);
+            // Donchian lower is the lowest low in the given period
+            donchianLower = Math.min(donchianLower, low);
+        });
+
+        // Get the latest candle (most recent data point)
+        const latestCandle = data[data.length - 1];
+        const priceClose = latestCandle.c;
+
+        // Calculate mid-level for Donchian channel (could be used in strong trends)
+        const donchianMid = (donchianUpper + donchianLower) / 2;
+
+        // STC approximation: Check if price is trending (based on momentum)
+        if (priceClose > donchianMid) {
+            stcCurrent = 1; // Bullish momentum
+        } else if (priceClose < donchianMid) {
+            stcCurrent = -1; // Bearish momentum
+        }
+
+        // Determine the signal based on the Donchian channel and STC indicator
+        let signal = "hold";
+        if (priceClose >= donchianUpper && stcCurrent === 1) {
+            signal = "sell"; // Sell when price hits the upper channel and STC is bearish
+        } else if (priceClose <= donchianLower && stcCurrent === -1) {
+            signal = "buy";  // Buy when price hits the lower channel and STC is bullish
+        } else if (stcCurrent === 1) {
+            signal = "up";   // Uptrend, price expected to go higher
+        } else if (stcCurrent === -1) {
+            signal = "down"; // Downtrend, price expected to go lower
+        }
+
+        return signal;
+    } catch (error) {
+        console.error("Error predicting signal:", error);
+        return { error: "Failed to process the data." };
+    }
+}
+
+// Function to calculate the SMA
+function calculateSMAAVI(data, period) {
+    let sum = 0;
+    for (let i = data.length - period; i < data.length; i++) {
+        sum += data[i].c;
+    }
+    return sum / period;
+}
+
+// Function to calculate MACD
+function calculateMACDAVI(data) {
+    let ema12 = calculateEMAAVI(data, 12);
+    let ema26 = calculateEMAAVI(data, 26);
+    let macd = ema12 - ema26;
+    let signal = calculateEMAAVI([ {c: macd} ], 9); // Assuming the signal line is calculated on MACD values
+    return { macd, signal };
+}
+
+// Function to calculate EMA
+function calculateEMAAVI(data, period) {
+    let multiplier = 2 / (period + 1);
+    let ema = data[0].c; // Initialize with the first value
+    
+    for (let i = 1; i < data.length; i++) {
+        ema = ((data[i].c - ema) * multiplier) + ema;
+    }
+    
+    return ema;
+}
+
+// Function to predict the next 3-4 minutes
+function predictNextMinutes(data) {
+    try {
+        if (data.length < 22) throw new Error("Insufficient data for SMA calculations.");
+        
+        // Calculate SMAs
+        let sma5 = calculateSMAAVI(data, 5);
+        let sma22 = calculateSMAAVI(data, 22);
+
+        // Calculate MACD
+        let { macd, signal } = calculateMACDAVI(data);
+
+        // Determine trend based on SMA
+        let trend = sma5 > sma22 ? "Up" : "Down";
+
+        // Determine signal
+        let macdSignal = macd > signal ? "Buy" : "Sell";
+
+        // Combine signals
+        let prediction = (trend === "Up" && macdSignal === "Buy") ? "Up" :
+                         (trend === "Down" && macdSignal === "Sell") ? "Down" :
+                         "Flat";
+
+        return prediction;
+
+    } catch (error) {
+        console.error("Error in prediction:", error.message);
+        return "Error";
+    }
+}
+
 
 let data=[{"t":1726465080,"o":1.10966,"h":1.10971,"l":1.10956,"c":1.10959},{"t":1726465020,"o":1.10966,"h":1.10972,"l":1.1096,"c":1.10965},{"t":1726464960,"o":1.10962,"h":1.10967,"l":1.10959,"c":1.10962},{"t":1726464900,"o":1.10969,"h":1.10972,"l":1.1096,"c":1.10963},{"t":1726464840,"o":1.10962,"h":1.10971,"l":1.10959,"c":1.10968},{"t":1726464780,"o":1.10963,"h":1.10966,"l":1.10959,"c":1.10963},{"t":1726464720,"o":1.10964,"h":1.10968,"l":1.10958,"c":1.10962},{"t":1726464660,"o":1.10968,"h":1.10971,"l":1.10962,"c":1.10966},{"t":1726464600,"o":1.10973,"h":1.10976,"l":1.10964,"c":1.10967},{"t":1726464540,"o":1.10973,"h":1.10976,"l":1.10967,"c":1.10972},{"t":1726464480,"o":1.10968,"h":1.10977,"l":1.10965,"c":1.10974},{"t":1726464420,"o":1.10967,"h":1.10977,"l":1.10964,"c":1.10969},{"t":1726464360,"o":1.10969,"h":1.10973,"l":1.10964,"c":1.10968},{"t":1726464300,"o":1.10974,"h":1.10977,"l":1.10964,"c":1.10968},{"t":1726464240,"o":1.10973,"h":1.10976,"l":1.1097,"c":1.10973},{"t":1726464180,"o":1.10972,"h":1.10977,"l":1.10965,"c":1.10974},{"t":1726464120,"o":1.10973,"h":1.10977,"l":1.1097,"c":1.10973},{"t":1726464060,"o":1.10972,"h":1.10977,"l":1.10964,"c":1.10972},{"t":1726464000,"o":1.10975,"h":1.10978,"l":1.10971,"c":1.10974},{"t":1726463940,"o":1.10971,"h":1.10975,"l":1.10965,"c":1.10972},{"t":1726463880,"o":1.10968,"h":1.10973,"l":1.10965,"c":1.1097},{"t":1726463820,"o":1.10969,"h":1.10972,"l":1.10964,"c":1.10967},{"t":1726463760,"o":1.10968,"h":1.10973,"l":1.10965,"c":1.10968},{"t":1726463700,"o":1.10966,"h":1.10973,"l":1.10963,"c":1.1097},{"t":1726463640,"o":1.1097,"h":1.10973,"l":1.1096,"c":1.10965},{"t":1726463580,"o":1.10969,"h":1.10974,"l":1.10965,"c":1.10968},{"t":1726463520,"o":1.10966,"h":1.10973,"l":1.10963,"c":1.1097},{"t":1726463460,"o":1.10968,"h":1.10972,"l":1.10962,"c":1.10968},{"t":1726463400,"o":1.10972,"h":1.10978,"l":1.10966,"c":1.1097},{"t":1726463340,"o":1.1098,"h":1.10983,"l":1.1097,"c":1.10974},{"t":1726463280,"o":1.10984,"h":1.10988,"l":1.10975,"c":1.10979},{"t":1726463220,"o":1.10991,"h":1.10995,"l":1.10981,"c":1.10985},{"t":1726463160,"o":1.10986,"h":1.10996,"l":1.10983,"c":1.10993},{"t":1726463100,"o":1.10985,"h":1.10989,"l":1.1098,"c":1.10985},{"t":1726463040,"o":1.1098,"h":1.10987,"l":1.10976,"c":1.10984},{"t":1726462980,"o":1.10985,"h":1.1099,"l":1.10981,"c":1.10984},{"t":1726462920,"o":1.10985,"h":1.10988,"l":1.10981,"c":1.10984},{"t":1726462860,"o":1.1098,"h":1.10993,"l":1.10977,"c":1.10984},{"t":1726462800,"o":1.10971,"h":1.10984,"l":1.10966,"c":1.10981},{"t":1726462740,"o":1.10975,"h":1.10978,"l":1.10969,"c":1.10972},{"t":1726462680,"o":1.1098,"h":1.10984,"l":1.10972,"c":1.10976},{"t":1726462620,"o":1.10985,"h":1.10991,"l":1.10978,"c":1.10981},{"t":1726462560,"o":1.10984,"h":1.10988,"l":1.10981,"c":1.10984},{"t":1726462500,"o":1.10984,"h":1.10988,"l":1.10981,"c":1.10985},{"t":1726462440,"o":1.10975,"h":1.10986,"l":1.10971,"c":1.10983},{"t":1726462380,"o":1.10978,"h":1.10983,"l":1.1097,"c":1.10973},{"t":1726462320,"o":1.10983,"h":1.10986,"l":1.10977,"c":1.1098},{"t":1726462260,"o":1.10984,"h":1.10988,"l":1.10981,"c":1.10984},{"t":1726462200,"o":1.10984,"h":1.10988,"l":1.10979,"c":1.10983},{"t":1726462140,"o":1.10974,"h":1.10988,"l":1.10971,"c":1.10985},{"t":1726462080,"o":1.10974,"h":1.10977,"l":1.10969,"c":1.10973},{"t":1726462020,"o":1.10972,"h":1.10976,"l":1.10968,"c":1.10973},{"t":1726461960,"o":1.10981,"h":1.10988,"l":1.10968,"c":1.10971},{"t":1726461900,"o":1.1098,"h":1.10987,"l":1.10977,"c":1.1098},{"t":1726461840,"o":1.10978,"h":1.10982,"l":1.10975,"c":1.10979},{"t":1726461780,"o":1.1098,"h":1.10986,"l":1.10974,"c":1.10977},{"t":1726461720,"o":1.10978,"h":1.1099,"l":1.10974,"c":1.10979},{"t":1726461660,"o":1.10981,"h":1.10986,"l":1.10976,"c":1.10979},{"t":1726461600,"o":1.10994,"h":1.10997,"l":1.10973,"c":1.1098},{"t":1726461540,"o":1.10999,"h":1.11004,"l":1.10992,"c":1.10995}]
 
@@ -1133,12 +1313,16 @@ const result15 = bollingerBandsStrategyThree(data);
 const result16 = generateSignal(data);
 const result17 = predictSignalTechnical(data);
 const result18 =predictSignalSS(data);
+const result19 =predictNextSignalEliza(data);
+const result20 = predictSignalSHIH(data)
+const result21 = predictNextMinutes(data)
 
 const results = [
     result1, result2, result3, result4, result5,
     result6, result7, result8, result9, result10,
     result11,result12,result13,result14,result15,
-    result16,result17,result18
+    result16,result17,result18,result19,result20,
+    result21
 ];
 
 // Initialize counters for each direction

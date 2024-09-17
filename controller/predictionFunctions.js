@@ -1097,6 +1097,184 @@ function predictSignalSS(data) {
   return signal;
 }
 
+function calculateSMAEliza(data, period) {
+    const sma = [];
+    for (let i = 0; i <= data.length - period; i++) {
+        const slice = data.slice(i, i + period);
+        const avg = slice.reduce((acc, curr) => acc + curr.c, 0) / period;
+        sma.push(avg);
+    }
+    return sma;
+}
+
+function calculateRSIEliza(data, period) {
+    let gains = 0;
+    let losses = 0;
+    
+    for (let i = 1; i < period; i++) {
+        const change = data[i].c - data[i - 1].c;
+        if (change > 0) {
+            gains += change;
+        } else {
+            losses -= change;
+        }
+    }
+    
+    const avgGain = gains / period;
+    const avgLoss = losses / period;
+    
+    const rs = avgGain / avgLoss;
+    const rsi = 100 - (100 / (1 + rs));
+    
+    return rsi;
+}
+
+function predictNextSignalEliza(data) {
+    // Define periods for the alligator moving averages
+    const alligatorShortPeriod = 5;
+    const alligatorMediumPeriod = 8;
+    const alligatorLongPeriod = 13;
+    const rsiPeriod = 35;
+    
+    // Calculate SMA for each period
+    const shortSMA = calculateSMAEliza(data, alligatorShortPeriod);
+    const mediumSMA = calculateSMAEliza(data, alligatorMediumPeriod);
+    const longSMA = calculateSMAEliza(data, alligatorLongPeriod);
+    
+    // Calculate RSI
+    const rsi = calculateRSIEliza(data, rsiPeriod);
+    
+    const lastPrice = data[data.length - 1].c;
+
+    // Alligator Crosses Down (downtrend)
+    if (shortSMA[shortSMA.length - 1] < longSMA[longSMA.length - 1] &&
+        mediumSMA[mediumSMA.length - 1] < longSMA[longSMA.length - 1] &&
+        rsi < 50) {
+        return "Down";
+    }
+    
+    // Alligator Crosses Up (uptrend)
+    if (shortSMA[shortSMA.length - 1] > longSMA[longSMA.length - 1] &&
+        mediumSMA[mediumSMA.length - 1] > longSMA[longSMA.length - 1] &&
+        rsi > 50) {
+        return "Up";
+    }
+    
+    // No clear trend (sideways)
+    return "Flat";
+}
+
+function predictSignalSHIH(data) {
+    try {
+        const PERIOD = 5; // Set the period for Donchian Channel
+        let donchianUpper = -Infinity;
+        let donchianLower = Infinity;
+        let stcCurrent = 0; // A simple STC approximation
+        
+        // Loop through the data to calculate Donchian Channel
+        data.forEach((candle, index) => {
+            const high = candle.h;
+            const low = candle.l;
+            // Donchian upper is the highest high in the given period
+            donchianUpper = Math.max(donchianUpper, high);
+            // Donchian lower is the lowest low in the given period
+            donchianLower = Math.min(donchianLower, low);
+        });
+
+        // Get the latest candle (most recent data point)
+        const latestCandle = data[data.length - 1];
+        const priceClose = latestCandle.c;
+
+        // Calculate mid-level for Donchian channel (could be used in strong trends)
+        const donchianMid = (donchianUpper + donchianLower) / 2;
+
+        // STC approximation: Check if price is trending (based on momentum)
+        if (priceClose > donchianMid) {
+            stcCurrent = 1; // Bullish momentum
+        } else if (priceClose < donchianMid) {
+            stcCurrent = -1; // Bearish momentum
+        }
+
+        // Determine the signal based on the Donchian channel and STC indicator
+        let signal = "hold";
+        if (priceClose >= donchianUpper && stcCurrent === 1) {
+            signal = "sell"; // Sell when price hits the upper channel and STC is bearish
+        } else if (priceClose <= donchianLower && stcCurrent === -1) {
+            signal = "buy";  // Buy when price hits the lower channel and STC is bullish
+        } else if (stcCurrent === 1) {
+            signal = "up";   // Uptrend, price expected to go higher
+        } else if (stcCurrent === -1) {
+            signal = "down"; // Downtrend, price expected to go lower
+        }
+
+        return signal;
+    } catch (error) {
+        console.error("Error predicting signal:", error);
+        return { error: "Failed to process the data." };
+    }
+}
+
+// Function to calculate the SMA
+function calculateSMAAVI(data, period) {
+    let sum = 0;
+    for (let i = data.length - period; i < data.length; i++) {
+        sum += data[i].c;
+    }
+    return sum / period;
+}
+
+// Function to calculate MACD
+function calculateMACDAVI(data) {
+    let ema12 = calculateEMAAVI(data, 12);
+    let ema26 = calculateEMAAVI(data, 26);
+    let macd = ema12 - ema26;
+    let signal = calculateEMAAVI([ {c: macd} ], 9); // Assuming the signal line is calculated on MACD values
+    return { macd, signal };
+}
+
+// Function to calculate EMA
+function calculateEMAAVI(data, period) {
+    let multiplier = 2 / (period + 1);
+    let ema = data[0].c; // Initialize with the first value
+    
+    for (let i = 1; i < data.length; i++) {
+        ema = ((data[i].c - ema) * multiplier) + ema;
+    }
+    
+    return ema;
+}
+
+// Function to predict the next 3-4 minutes
+function predictNextMinutes(data) {
+    try {
+        if (data.length < 22) throw new Error("Insufficient data for SMA calculations.");
+        
+        // Calculate SMAs
+        let sma5 = calculateSMAAVI(data, 5);
+        let sma22 = calculateSMAAVI(data, 22);
+
+        // Calculate MACD
+        let { macd, signal } = calculateMACDAVI(data);
+
+        // Determine trend based on SMA
+        let trend = sma5 > sma22 ? "Up" : "Down";
+
+        // Determine signal
+        let macdSignal = macd > signal ? "Buy" : "Sell";
+
+        // Combine signals
+        let prediction = (trend === "Up" && macdSignal === "Buy") ? "Up" :
+                         (trend === "Down" && macdSignal === "Sell") ? "Down" :
+                         "Flat";
+
+        return prediction;
+
+    } catch (error) {
+        console.error("Error in prediction:", error.message);
+        return "Error";
+    }
+}
+
 
 module.exports = {
     predictNextDirection,
@@ -1116,5 +1294,8 @@ module.exports = {
     bollingerBandsStrategyThree,
     generateSignal,
     predictSignalTechnical,
-    predictSignalSS
+    predictSignalSS,
+    predictNextSignalEliza,
+    predictSignalSHIH,
+    predictNextMinutes
 }
